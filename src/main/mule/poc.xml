@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns:azure-storage="http://www.mulesoft.org/schema/mule/azure-storage" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/azure-storage http://www.mulesoft.org/schema/mule/azure-storage/current/mule-azure-storage.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<azure-storage:config name="Azure_Storage_Config" doc:name="Azure Storage Config" doc:id="8f16a3c8-a1c1-4d1d-b5a6-fb013ce5024d" >
+		<azure-storage:access-key-azure-connection accountName="(INPUT_STORAGE_ACCOUNT_NAME)" accountKey="(ENTER_ACCOUNT_KEY_FROM_ACCESS_KEYS_CONTAINER)" />
+	</azure-storage:config>
+	<flow name="blobs-poc-app-flow" doc:id="74905e58-bb8f-455a-880e-b0f19bf97591" >
+		<scheduler doc:name="Scheduler" doc:id="38be628d-d877-41fd-977f-7a0716f66f13" >
+			<scheduling-strategy >
+				<fixed-frequency startDelay="1" timeUnit="DAYS"/>
+			</scheduling-strategy>
+		</scheduler>
+		<logger level="INFO" doc:name="Logger" doc:id="c703c684-315a-4781-b864-d984d636a5aa" message='#["Searching for blobs in the container"]'/>
+		<azure-storage:list-blobs-in-container doc:name="List blobs in container" doc:id="36653ec5-97d7-4cf7-bba1-6270dce278e7" config-ref="Azure_Storage_Config" containerName='#["democontainer"]'/>
+		<logger level="INFO" doc:name="Logger" doc:id="0957f080-d633-4a02-b42d-efc088fc78ca" message='#["Number of Blobs present are " ++ sizeOf(payload)]'/>
+		<choice doc:name="Choice" doc:id="9f96d94e-968a-4f3b-9d4c-e2cefd79c9cd" >
+			<when expression="#[sizeOf(payload) &gt; 0]">
+				<foreach doc:name="For Each" doc:id="75a62cd5-4e97-49ba-8c9a-8cf1c301df2f" >
+					<set-variable value="#[payload.blobContainer.containerName]" doc:name="Container Name" doc:id="c71992d4-eb61-4167-ac57-df7b133caddb" variableName="containerName"/>
+					<set-variable value='#[(payload.uri.decodedPath splitBy ("/"))[-1]]' doc:name="Blob Name" doc:id="2a0fdb12-7b38-405b-845d-a5aded6059c7" variableName="blobName"/>
+					<azure-storage:download-blob doc:name="Download blob" doc:id="04c8ac1f-992b-4170-b18f-ac5c922fe702" config-ref="Azure_Storage_Config">
+			<azure-storage:blob container='#[vars.containerName]' fileName='#[vars.blobName]' />
+		</azure-storage:download-blob>
+					<logger level="INFO" doc:name="Logger" doc:id="528440d6-ca71-4d63-886f-a72eb9795bf2" message='#["Blob " ++ " " ++ " downloaded"]'/>
+					<azure-storage:delete-blob doc:name="Delete blob" doc:id="fa2ba1ce-2887-42ab-9a7a-093d2353bddd" config-ref="Azure_Storage_Config">
+						<azure-storage:blob container='#[vars.containerName]' fileName='#[vars.blobName]'/>
+					</azure-storage:delete-blob>
+				</foreach>
+				<logger level="INFO" doc:name="Logger" doc:id="a496f27e-087f-49dd-b966-38962a019b35" message='#["Blobs Downloaded"]'/>
+			</when>
+			<otherwise >
+				<set-payload value='#[output application/json&#10;---&#10;&#10;[&#10;  {&#10;    "name": "XYZ",&#10;    "class": 7&#10;  },&#10;  {&#10;    "name": "ABC",&#10;    "class": 8&#10;  }&#10;]]' doc:name="Set Payload" doc:id="a2502949-12c6-4a7e-b575-da75448f8d1d" />
+				<azure-storage:upload-blob doc:name="Upload blob" doc:id="dd51f8a5-fd84-4695-a5e4-18e4e2d6bd1a" config-ref="Azure_Storage_Config">
+			<azure-storage:storblob container='(INPUT_CONTAINER_NAME)' fileName='(FILE_NAME)' fileStream="#[payload]" />
+		</azure-storage:upload-blob>
+				<logger level="INFO" doc:name="Logger" doc:id="b17e98e2-1a41-45dc-95c4-62193126dc32" message='#["Blob created"]'/>
+			</otherwise>
+		</choice>
+	</flow>
+</mule>
